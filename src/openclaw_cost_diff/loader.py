@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import Iterable, Iterator, Mapping
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +21,8 @@ TEXT_SUFFIXES = {".json", ".jsonl", ".ndjson", ".log", ".txt", ""}
 CONTAINER_KEYS = ("events", "messages", "turns", "requests", "records", "sessions")
 NESTED_MAPPING_KEYS = ("usage", "response", "payload", "message", "data", "result", "cost", "metrics")
 TIMESTAMP_KEYS = ("timestamp", "created_at", "createdAt", "started_at", "startedAt", "ended_at", "endedAt", "time", "date", "ts")
+MIN_REASONABLE_TIMESTAMP = datetime(2000, 1, 1, tzinfo=timezone.utc)
+MAX_REASONABLE_TIMESTAMP = datetime(2100, 1, 1, tzinfo=timezone.utc)
 INPUT_KEYS = ("input_tokens", "inputTokens", "prompt_tokens", "promptTokens", "tokens_in", "tokensIn", "input")
 OUTPUT_KEYS = ("output_tokens", "outputTokens", "completion_tokens", "completionTokens", "tokens_out", "tokensOut", "output")
 MODEL_KEYS = ("model", "model_id", "modelId", "provider_model", "providerModel")
@@ -192,12 +194,34 @@ def _timestamp(item: Mapping[str, Any]) -> datetime | None:
     if value is None:
         return None
     if isinstance(value, (int, float)):
-        return datetime.fromtimestamp(value).astimezone()
+        return _datetime_from_epoch(value)
     if isinstance(value, str):
         try:
             return parse_datetime(value)
         except ValueError:
             return None
+    return None
+
+
+def _datetime_from_epoch(value: int | float) -> datetime | None:
+    if isinstance(value, bool) or value <= 0:
+        return None
+
+    candidates = [float(value)]
+    if value >= 1_000_000_000_000_000_000:
+        candidates.insert(0, float(value) / 1_000_000_000)
+    if value >= 1_000_000_000_000_000:
+        candidates.insert(0, float(value) / 1_000_000)
+    if value >= 100_000_000_000:
+        candidates.insert(0, float(value) / 1_000)
+
+    for seconds in candidates:
+        try:
+            timestamp = datetime.fromtimestamp(seconds, tz=timezone.utc)
+        except (OSError, OverflowError, ValueError):
+            continue
+        if MIN_REASONABLE_TIMESTAMP <= timestamp < MAX_REASONABLE_TIMESTAMP:
+            return timestamp
     return None
 
 

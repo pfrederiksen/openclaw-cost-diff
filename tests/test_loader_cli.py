@@ -11,14 +11,14 @@ FIXTURES = Path(__file__).parent.parent / "fixtures"
 def test_loads_jsonl_and_session_json_shapes():
     records = load_records([FIXTURES])
 
-    assert len(records) == 7
-    assert sum(record.input_tokens for record in records) == 3700
+    assert len(records) == 9
+    assert sum(record.input_tokens for record in records) == 4400
     assert any(record.cost is None for record in records)
     assert {record.agent for record in records} == {"main", "worker", "live-agent"}
 
 
 def test_loads_nested_extensionless_agent_session_shape():
-    records = load_records([FIXTURES / "agents"])
+    records = load_records([FIXTURES / "agents" / "live-agent" / "sessions" / "transcript"])
 
     assert len(records) == 1
     record = records[0]
@@ -29,6 +29,22 @@ def test_loads_nested_extensionless_agent_session_shape():
     assert record.input_tokens == 1200
     assert record.output_tokens == 800
     assert record.cost == 0.0805
+
+
+def test_numeric_epoch_milliseconds_are_parsed():
+    records = load_records([FIXTURES / "agents" / "live-agent" / "sessions" / "numeric-time.jsonl"])
+
+    assert len(records) == 1
+    assert records[0].timestamp.isoformat() == "2026-04-18T15:00:00+00:00"
+    assert records[0].cost == 0.0123
+
+
+def test_out_of_range_numeric_time_is_ignored_without_crashing():
+    records = load_records([FIXTURES / "agents" / "live-agent" / "sessions" / "ambiguous-time.jsonl"])
+
+    assert len(records) == 1
+    assert records[0].timestamp.isoformat() == "2026-04-18T15:01:00+00:00"
+    assert records[0].cost == 0.015
 
 
 def test_cli_json_output(capsys):
@@ -50,7 +66,7 @@ def test_cli_json_output(capsys):
 
     assert code == 0
     payload = json.loads(capsys.readouterr().out)
-    assert payload["totals"]["current"]["input_tokens"] == 2700
+    assert payload["totals"]["current"]["input_tokens"] == 3400
     assert payload["totals"]["previous"]["missing_cost_records"] == 1
     assert payload["groups"]["model"][0]["key"] == "openai-codex/gpt-5.4"
 

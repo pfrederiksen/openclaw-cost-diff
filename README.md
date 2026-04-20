@@ -55,7 +55,7 @@ Set `OPENCLAW_DATA_DIR` to override the defaults. Multiple paths can be separate
 
 The loader accepts `.json`, `.jsonl`, `.ndjson`, `.log`, `.txt`, and extensionless files. It supports flat records, arrays, `sessions`, `records`, and common nested transcript containers such as `events`, `messages`, `turns`, and `requests`.
 
-For current OpenClaw agent session data, the loader also handles wrapper records where timestamps and channels live on the outer event while model, usage, and cost live under nested objects such as `payload.response.usage`.
+For current OpenClaw agent session data, the loader also handles wrapper records where timestamps and channels live on the outer event while model, usage, and cost live under nested objects such as `payload.response.usage`. Numeric timestamps may be seconds, milliseconds, microseconds, or nanoseconds, and out-of-range numeric timestamp candidates are ignored instead of crashing the scan.
 
 ## Cost Field Assumptions
 

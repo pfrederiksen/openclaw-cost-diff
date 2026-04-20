@@ -1,0 +1,2 @@
+{"time":1776524400000,"type":"response.completed","payload":{"response":{"model":"openai-codex/gpt-5.4","usage":{"inputTokens":300,"outputTokens":120,"totalCost":0.0123}}}}
+
