@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 import pytest
 
@@ -6,7 +6,7 @@ from openclaw_cost_diff.windows import parse_duration, resolve_windows
 
 
 def test_date_window_comparison_from_relative_ranges():
-    now = datetime(2026, 4, 20, tzinfo=UTC)
+    now = datetime(2026, 4, 20, tzinfo=timezone.utc)
 
     current, previous = resolve_windows(
         last="7d",
@@ -18,10 +18,10 @@ def test_date_window_comparison_from_relative_ranges():
         now=now,
     )
 
-    assert current.start == datetime(2026, 4, 13, tzinfo=UTC)
+    assert current.start == datetime(2026, 4, 13, tzinfo=timezone.utc)
     assert current.end == now
-    assert previous.start == datetime(2026, 4, 6, tzinfo=UTC)
-    assert previous.end == datetime(2026, 4, 13, tzinfo=UTC)
+    assert previous.start == datetime(2026, 4, 6, tzinfo=timezone.utc)
+    assert previous.end == datetime(2026, 4, 13, tzinfo=timezone.utc)
 
 
 def test_explicit_date_ranges():
@@ -34,13 +34,12 @@ def test_explicit_date_ranges():
         previous_to="2026-04-10",
     )
 
-    assert current.start == datetime(2026, 4, 10, tzinfo=UTC)
-    assert current.end == datetime(2026, 4, 20, tzinfo=UTC)
-    assert previous.start == datetime(2026, 3, 31, tzinfo=UTC)
-    assert previous.end == datetime(2026, 4, 10, tzinfo=UTC)
+    assert current.start == datetime(2026, 4, 10, tzinfo=timezone.utc)
+    assert current.end == datetime(2026, 4, 20, tzinfo=timezone.utc)
+    assert previous.start == datetime(2026, 3, 31, tzinfo=timezone.utc)
+    assert previous.end == datetime(2026, 4, 10, tzinfo=timezone.utc)
 
 
 def test_invalid_duration_is_rejected():
     with pytest.raises(ValueError):
         parse_duration("seven-days")
-

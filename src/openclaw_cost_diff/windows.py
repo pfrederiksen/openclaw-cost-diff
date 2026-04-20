@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from .models import Window
 
@@ -17,8 +17,8 @@ def parse_datetime(value: str) -> datetime:
     else:
         dt = datetime.fromisoformat(text)
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=UTC)
-    return dt.astimezone(UTC)
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
 
 
 def parse_duration(value: str) -> timedelta:
@@ -50,7 +50,7 @@ def resolve_windows(
     previous_to: str | None,
     now: datetime | None = None,
 ) -> tuple[Window, Window]:
-    now = (now or datetime.now(UTC)).astimezone(UTC)
+    now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
 
     if current_from or current_to:
         if not current_from:
@@ -77,4 +77,3 @@ def resolve_windows(
         raise ValueError("previous window start must be before end")
 
     return current, previous_window
-
