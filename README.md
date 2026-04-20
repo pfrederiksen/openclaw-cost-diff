@@ -57,6 +57,8 @@ The loader accepts `.json`, `.jsonl`, `.ndjson`, `.log`, `.txt`, and extensionle
 
 For current OpenClaw agent session data, the loader also handles wrapper records where timestamps and channels live on the outer event while model, usage, and cost live under nested objects such as `payload.response.usage` or `message.usage.cost.total`. Numeric timestamps may be seconds, milliseconds, microseconds, or nanoseconds, and out-of-range numeric timestamp candidates are ignored instead of crashing the scan.
 
+When `usage.input` and `usage.output` are token counts, they are never treated as cost components unless they appear inside an explicit nested `cost` object.
+
 ## Cost Field Assumptions
 
 `openclaw-cost-diff` intentionally avoids pricing tables. It compares cost data that is already present in local OpenClaw records.

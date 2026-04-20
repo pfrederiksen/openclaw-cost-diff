@@ -11,8 +11,8 @@ FIXTURES = Path(__file__).parent.parent / "fixtures"
 def test_loads_jsonl_and_session_json_shapes():
     records = load_records([FIXTURES])
 
-    assert len(records) == 10
-    assert sum(record.input_tokens for record in records) == 12958
+    assert len(records) == 11
+    assert sum(record.input_tokens for record in records) == 17958
     assert any(record.cost is None for record in records)
     assert {record.agent for record in records} == {"main", "worker", "live-agent"}
 
@@ -60,6 +60,16 @@ def test_message_usage_cost_total_is_parsed():
     assert record.cost == 0.0218
 
 
+def test_usage_tokens_are_not_treated_as_cost_components():
+    records = load_records([FIXTURES / "agents" / "live-agent" / "sessions" / "usage-without-cost.jsonl"])
+
+    assert len(records) == 1
+    record = records[0]
+    assert record.input_tokens == 5000
+    assert record.output_tokens == 250
+    assert record.cost is None
+
+
 def test_cli_json_output(capsys):
     code = main(
         [
@@ -79,7 +89,8 @@ def test_cli_json_output(capsys):
 
     assert code == 0
     payload = json.loads(capsys.readouterr().out)
-    assert payload["totals"]["current"]["input_tokens"] == 11958
+    assert payload["totals"]["current"]["input_tokens"] == 16958
+    assert payload["totals"]["current"]["missing_cost_records"] == 1
     assert payload["totals"]["previous"]["missing_cost_records"] == 1
     assert payload["groups"]["model"][0]["key"] == "openai-codex/gpt-5.4"
 

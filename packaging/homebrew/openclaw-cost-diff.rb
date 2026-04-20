@@ -3,7 +3,7 @@ class OpenclawCostDiff < Formula
 
   desc "Compare OpenClaw token usage and API cost"
   homepage "https://github.com/pfrederiksen/openclaw-cost-diff"
-  url "https://github.com/pfrederiksen/openclaw-cost-diff/archive/refs/tags/v0.1.4.tar.gz"
+  url "https://github.com/pfrederiksen/openclaw-cost-diff/archive/refs/tags/v0.1.5.tar.gz"
   sha256 "REPLACE_WITH_RELEASE_SHA256"
   license "MIT"
 

@@ -164,7 +164,7 @@ def _record_from_mapping(item: Mapping[str, Any], source: str, context: Mapping[
     if cost is None and usage:
         cost = _cost_from_mapping(usage)
     if cost is None and cost_block:
-        cost = _cost_from_mapping(cost_block)
+        cost = _cost_from_mapping(cost_block, allow_components=True)
 
     if input_tokens == 0 and output_tokens == 0 and cost is None:
         return None
@@ -336,13 +336,13 @@ def _float_from(item: Mapping[str, Any], keys: tuple[str, ...]) -> float | None:
         return None
 
 
-def _cost_from_mapping(item: Mapping[str, Any]) -> float | None:
+def _cost_from_mapping(item: Mapping[str, Any], *, allow_components: bool = False) -> float | None:
     for key in NESTED_COST_TOTAL_KEYS:
         if key not in item:
             continue
         value = item[key]
         if isinstance(value, Mapping):
-            nested = _cost_from_mapping(value)
+            nested = _cost_from_mapping(value, allow_components=True)
             if nested is not None:
                 return nested
             continue
@@ -350,10 +350,11 @@ def _cost_from_mapping(item: Mapping[str, Any]) -> float | None:
         if parsed is not None:
             return parsed
 
-    component_values = [_float_value(item.get(key)) for key in COMPONENT_COST_KEYS]
-    present_components = [value for value in component_values if value is not None]
-    if present_components:
-        return sum(present_components)
+    if allow_components:
+        component_values = [_float_value(item.get(key)) for key in COMPONENT_COST_KEYS]
+        present_components = [value for value in component_values if value is not None]
+        if present_components:
+            return sum(present_components)
     return None
 
 

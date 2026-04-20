@@ -1,0 +1,2 @@
+{"type":"message","timestamp":"2026-04-18T15:03:00Z","message":{"role":"assistant","provider":"openai","model":"openai-codex/gpt-5.4","usage":{"input":5000,"output":250,"cacheRead":100,"cacheWrite":50,"totalTokens":5400}}}
+
