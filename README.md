@@ -46,13 +46,16 @@ openclaw-cost-diff --data ~/.openclaw/sessions --data ~/.openclaw/transcripts --
 
 By default the CLI scans:
 
+- `~/.openclaw/agents`
 - `~/.openclaw/sessions`
 - `~/.openclaw/transcripts`
 - `~/.openclaw`
 
 Set `OPENCLAW_DATA_DIR` to override the defaults. Multiple paths can be separated with your platform path separator, or you can pass repeated `--data` arguments.
 
-The loader accepts `.json`, `.jsonl`, and `.ndjson` files. It supports flat records, arrays, `sessions`, `records`, and common nested transcript containers such as `events`, `messages`, `turns`, `requests`, and `usage`.
+The loader accepts `.json`, `.jsonl`, `.ndjson`, `.log`, `.txt`, and extensionless files. It supports flat records, arrays, `sessions`, `records`, and common nested transcript containers such as `events`, `messages`, `turns`, and `requests`.
+
+For current OpenClaw agent session data, the loader also handles wrapper records where timestamps and channels live on the outer event while model, usage, and cost live under nested objects such as `payload.response.usage`.
 
 ## Cost Field Assumptions
 
@@ -132,4 +135,3 @@ python -m pip install -e ".[dev]"
 pytest
 openclaw-cost-diff --data fixtures --from 2026-04-13 --to 2026-04-20 --prev-from 2026-04-06 --prev-to 2026-04-13
 ```
-

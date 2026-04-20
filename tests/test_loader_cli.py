@@ -11,10 +11,24 @@ FIXTURES = Path(__file__).parent.parent / "fixtures"
 def test_loads_jsonl_and_session_json_shapes():
     records = load_records([FIXTURES])
 
-    assert len(records) == 6
-    assert sum(record.input_tokens for record in records) == 2500
+    assert len(records) == 7
+    assert sum(record.input_tokens for record in records) == 3700
     assert any(record.cost is None for record in records)
-    assert {record.agent for record in records} == {"main", "worker"}
+    assert {record.agent for record in records} == {"main", "worker", "live-agent"}
+
+
+def test_loads_nested_extensionless_agent_session_shape():
+    records = load_records([FIXTURES / "agents"])
+
+    assert len(records) == 1
+    record = records[0]
+    assert record.timestamp.isoformat() == "2026-04-18T15:00:00+00:00"
+    assert record.model == "openai-codex/gpt-5.4"
+    assert record.agent == "live-agent"
+    assert record.channel == "response.completed"
+    assert record.input_tokens == 1200
+    assert record.output_tokens == 800
+    assert record.cost == 0.0805
 
 
 def test_cli_json_output(capsys):
@@ -36,7 +50,7 @@ def test_cli_json_output(capsys):
 
     assert code == 0
     payload = json.loads(capsys.readouterr().out)
-    assert payload["totals"]["current"]["input_tokens"] == 1500
+    assert payload["totals"]["current"]["input_tokens"] == 2700
     assert payload["totals"]["previous"]["missing_cost_records"] == 1
     assert payload["groups"]["model"][0]["key"] == "openai-codex/gpt-5.4"
 
@@ -61,4 +75,3 @@ def test_cli_fail_on_cost_increase(capsys):
 
     assert code == 2
     assert "Regression" in capsys.readouterr().out
-

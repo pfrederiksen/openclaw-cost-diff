@@ -1,0 +1,2 @@
+{"timestamp":"2026-04-18T15:00:00Z","type":"response.completed","payload":{"response":{"model":"openai-codex/gpt-5.4","usage":{"inputTokens":1200,"outputTokens":800,"totalCost":0.0805}}}}
+

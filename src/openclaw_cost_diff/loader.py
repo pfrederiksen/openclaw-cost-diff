@@ -11,15 +11,37 @@ from .models import CostRecord
 from .windows import parse_datetime
 
 DEFAULT_DATA_DIRS = (
+    "~/.openclaw/agents",
     "~/.openclaw/sessions",
     "~/.openclaw/transcripts",
     "~/.openclaw",
 )
 
-TIMESTAMP_KEYS = ("timestamp", "created_at", "started_at", "ended_at", "time", "date")
-INPUT_KEYS = ("input_tokens", "prompt_tokens", "tokens_in", "input")
-OUTPUT_KEYS = ("output_tokens", "completion_tokens", "tokens_out", "output")
-COST_KEYS = ("cost", "cost_usd", "total_cost", "total_cost_usd", "api_cost", "api_cost_usd")
+TEXT_SUFFIXES = {".json", ".jsonl", ".ndjson", ".log", ".txt", ""}
+CONTAINER_KEYS = ("events", "messages", "turns", "requests", "records", "sessions")
+NESTED_MAPPING_KEYS = ("usage", "response", "payload", "message", "data", "result", "cost", "metrics")
+TIMESTAMP_KEYS = ("timestamp", "created_at", "createdAt", "started_at", "startedAt", "ended_at", "endedAt", "time", "date", "ts")
+INPUT_KEYS = ("input_tokens", "inputTokens", "prompt_tokens", "promptTokens", "tokens_in", "tokensIn", "input")
+OUTPUT_KEYS = ("output_tokens", "outputTokens", "completion_tokens", "completionTokens", "tokens_out", "tokensOut", "output")
+MODEL_KEYS = ("model", "model_id", "modelId", "provider_model", "providerModel")
+AGENT_KEYS = ("agent", "agent_id", "agentId", "session_agent", "sessionAgent")
+CHANNEL_KEYS = ("channel", "role", "stream", "conversation_channel", "conversationChannel", "type")
+COST_KEYS = (
+    "cost",
+    "cost_usd",
+    "costUsd",
+    "costUSD",
+    "total_cost",
+    "totalCost",
+    "total_cost_usd",
+    "totalCostUsd",
+    "totalCostUSD",
+    "api_cost",
+    "apiCost",
+    "api_cost_usd",
+    "apiCostUsd",
+    "apiCostUSD",
+)
 
 
 def default_data_paths() -> list[Path]:
@@ -40,11 +62,11 @@ def load_records(paths: Iterable[Path]) -> list[CostRecord]:
 
 def _iter_files(path: Path) -> Iterator[Path]:
     if path.is_file():
-        if path.suffix.lower() in {".json", ".jsonl", ".ndjson"}:
+        if _looks_parseable(path):
             yield path
         return
     for child in path.rglob("*"):
-        if child.is_file() and child.suffix.lower() in {".json", ".jsonl", ".ndjson"}:
+        if child.is_file() and _looks_parseable(child):
             yield child
 
 
@@ -56,15 +78,32 @@ def _load_file(path: Path) -> Iterator[CostRecord]:
     if not text.strip():
         return
 
-    if path.suffix.lower() in {".jsonl", ".ndjson"}:
-        for line_number, line in enumerate(text.splitlines(), start=1):
-            if not line.strip():
-                continue
-            try:
-                payload = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            yield from _records_from_payload(payload, f"{path}:{line_number}")
+    suffix = path.suffix.lower()
+    if suffix == ".json":
+        try:
+            payload = json.loads(text)
+        except json.JSONDecodeError:
+            yield from _load_json_lines(text, path)
+            return
+        yield from _records_from_payload(payload, str(path))
+        return
+
+    yield from _load_json_lines(text, path)
+
+
+def _load_json_lines(text: str, path: Path) -> Iterator[CostRecord]:
+    parsed_any = False
+    for line_number, line in enumerate(text.splitlines(), start=1):
+        if not line.strip():
+            continue
+        try:
+            payload = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        parsed_any = True
+        yield from _records_from_payload(payload, f"{path}:{line_number}")
+
+    if parsed_any:
         return
 
     try:
@@ -74,44 +113,39 @@ def _load_file(path: Path) -> Iterator[CostRecord]:
     yield from _records_from_payload(payload, str(path))
 
 
-def _records_from_payload(payload: Any, source: str) -> Iterator[CostRecord]:
+def _records_from_payload(payload: Any, source: str, context: Mapping[str, Any] | None = None) -> Iterator[CostRecord]:
+    context = context or {}
     if isinstance(payload, list):
         for item in payload:
-            yield from _records_from_payload(item, source)
+            yield from _records_from_payload(item, source, context)
         return
 
     if not isinstance(payload, Mapping):
         return
 
-    if "sessions" in payload and isinstance(payload["sessions"], list):
-        for session in payload["sessions"]:
-            yield from _records_from_payload(session, source)
+    inherited = {**context, **_context_from_mapping(payload)}
+
+    if _has_container_list(payload):
+        for child in _iter_children(payload):
+            yield from _records_from_payload(child, source, inherited)
         return
 
-    if "records" in payload and isinstance(payload["records"], list):
-        for record in payload["records"]:
-            yield from _records_from_payload(record, source)
+    record = _record_from_mapping(payload, source, inherited)
+    if record is not None:
+        yield record
         return
 
-    session_context = payload
-    nested = _first_list(payload, ("events", "messages", "turns", "requests", "usage"))
-    if nested is not None:
-        for item in nested:
-            if isinstance(item, Mapping):
-                merged = {**session_context, **item}
-                yield from _record_from_mapping(merged, source)
-        return
-
-    yield from _record_from_mapping(payload, source)
+    for child in _iter_children(payload):
+        yield from _records_from_payload(child, source, inherited)
 
 
-def _record_from_mapping(item: Mapping[str, Any], source: str) -> Iterator[CostRecord]:
-    timestamp = _timestamp(item)
+def _record_from_mapping(item: Mapping[str, Any], source: str, context: Mapping[str, Any]) -> CostRecord | None:
+    timestamp = _timestamp(item) or _timestamp(context)
     if timestamp is None:
-        return
+        return None
 
-    usage = _mapping(item.get("usage"))
-    cost_block = _mapping(item.get("cost"))
+    usage = _find_usage_mapping(item)
+    cost_block = _find_cost_mapping(item)
     input_tokens = _int_from(item, INPUT_KEYS)
     output_tokens = _int_from(item, OUTPUT_KEYS)
 
@@ -124,21 +158,31 @@ def _record_from_mapping(item: Mapping[str, Any], source: str) -> Iterator[CostR
 
     cost = _float_from(item, COST_KEYS)
     if cost is None and cost_block:
-        cost = _float_from(cost_block, COST_KEYS + ("usd", "amount"))
+        cost = _float_from(cost_block, COST_KEYS + ("usd", "amount", "total"))
     if cost is None and usage:
         cost = _float_from(usage, COST_KEYS)
 
     if input_tokens == 0 and output_tokens == 0 and cost is None:
-        return
+        return None
 
-    yield CostRecord(
+    return CostRecord(
         timestamp=timestamp,
         input_tokens=input_tokens,
         output_tokens=output_tokens,
         cost=cost,
-        model=_string_from(item, ("model", "model_id", "provider_model")) or "unknown",
-        agent=_string_from(item, ("agent", "agent_id", "agentId", "session_agent")) or "unknown",
-        channel=_string_from(item, ("channel", "role", "stream", "conversation_channel")) or "unknown",
+        model=_string_from(item, MODEL_KEYS)
+        or _find_nested_string(item, MODEL_KEYS)
+        or _string_from(context, MODEL_KEYS)
+        or "unknown",
+        agent=_string_from(item, AGENT_KEYS)
+        or _find_nested_string(item, AGENT_KEYS)
+        or _string_from(context, AGENT_KEYS)
+        or _agent_from_source(source)
+        or "unknown",
+        channel=_string_from(item, CHANNEL_KEYS)
+        or _find_nested_string(item, CHANNEL_KEYS)
+        or _string_from(context, CHANNEL_KEYS)
+        or "unknown",
         source=source,
     )
 
@@ -159,6 +203,82 @@ def _timestamp(item: Mapping[str, Any]) -> datetime | None:
 
 def _mapping(value: Any) -> Mapping[str, Any] | None:
     return value if isinstance(value, Mapping) else None
+
+
+def _looks_parseable(path: Path) -> bool:
+    return path.suffix.lower() in TEXT_SUFFIXES
+
+
+def _has_container_list(item: Mapping[str, Any]) -> bool:
+    return any(isinstance(item.get(key), list) for key in CONTAINER_KEYS)
+
+
+def _iter_children(item: Mapping[str, Any]) -> Iterator[Any]:
+    for value in item.values():
+        if isinstance(value, Mapping):
+            yield value
+        elif isinstance(value, list):
+            yield from value
+
+
+def _context_from_mapping(item: Mapping[str, Any]) -> dict[str, Any]:
+    context: dict[str, Any] = {}
+    for key in TIMESTAMP_KEYS + MODEL_KEYS + AGENT_KEYS + CHANNEL_KEYS:
+        if key in item and _is_scalar(item[key]):
+            context[key] = item[key]
+    return context
+
+
+def _find_usage_mapping(item: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    direct = _mapping(item.get("usage"))
+    if direct is not None:
+        return direct
+    return _find_nested_mapping(item, lambda value: _has_any_key(value, INPUT_KEYS + OUTPUT_KEYS))
+
+
+def _find_cost_mapping(item: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    direct = _mapping(item.get("cost"))
+    if direct is not None:
+        return direct
+    return _find_nested_mapping(item, lambda value: _has_any_key(value, COST_KEYS + ("usd", "amount", "total")))
+
+
+def _find_nested_mapping(item: Mapping[str, Any], predicate: Any) -> Mapping[str, Any] | None:
+    stack = [_mapping(item.get(key)) for key in NESTED_MAPPING_KEYS]
+    while stack:
+        candidate = stack.pop(0)
+        if candidate is None:
+            continue
+        if predicate(candidate):
+            return candidate
+        for key in NESTED_MAPPING_KEYS:
+            child = _mapping(candidate.get(key))
+            if child is not None:
+                stack.append(child)
+    return None
+
+
+def _find_nested_string(item: Mapping[str, Any], keys: tuple[str, ...]) -> str | None:
+    mapping = _find_nested_mapping(item, lambda value: _has_any_key(value, keys))
+    if mapping is None:
+        return None
+    return _string_from(mapping, keys)
+
+
+def _has_any_key(item: Mapping[str, Any], keys: tuple[str, ...]) -> bool:
+    return any(key in item for key in keys)
+
+
+def _is_scalar(value: Any) -> bool:
+    return isinstance(value, (str, int, float, bool))
+
+
+def _agent_from_source(source: str) -> str | None:
+    parts = Path(source.split(":", 1)[0]).parts
+    for index, part in enumerate(parts):
+        if part == "agents" and index + 1 < len(parts):
+            return parts[index + 1]
+    return None
 
 
 def _first_list(item: Mapping[str, Any], keys: tuple[str, ...]) -> list[Any] | None:
@@ -199,4 +319,3 @@ def _string_from(item: Mapping[str, Any], keys: tuple[str, ...]) -> str | None:
     if value in (None, ""):
         return None
     return str(value)
-
