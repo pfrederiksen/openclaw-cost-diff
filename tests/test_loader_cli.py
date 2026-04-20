@@ -11,8 +11,8 @@ FIXTURES = Path(__file__).parent.parent / "fixtures"
 def test_loads_jsonl_and_session_json_shapes():
     records = load_records([FIXTURES])
 
-    assert len(records) == 9
-    assert sum(record.input_tokens for record in records) == 4400
+    assert len(records) == 10
+    assert sum(record.input_tokens for record in records) == 12958
     assert any(record.cost is None for record in records)
     assert {record.agent for record in records} == {"main", "worker", "live-agent"}
 
@@ -47,6 +47,19 @@ def test_out_of_range_numeric_time_is_ignored_without_crashing():
     assert records[0].cost == 0.015
 
 
+def test_message_usage_cost_total_is_parsed():
+    records = load_records([FIXTURES / "agents" / "live-agent" / "sessions" / "message-usage-cost.jsonl"])
+
+    assert len(records) == 1
+    record = records[0]
+    assert record.timestamp.isoformat() == "2026-04-18T15:02:00+00:00"
+    assert record.model == "openai-codex/gpt-5.4"
+    assert record.channel == "message"
+    assert record.input_tokens == 8558
+    assert record.output_tokens == 27
+    assert record.cost == 0.0218
+
+
 def test_cli_json_output(capsys):
     code = main(
         [
@@ -66,7 +79,7 @@ def test_cli_json_output(capsys):
 
     assert code == 0
     payload = json.loads(capsys.readouterr().out)
-    assert payload["totals"]["current"]["input_tokens"] == 3400
+    assert payload["totals"]["current"]["input_tokens"] == 11958
     assert payload["totals"]["previous"]["missing_cost_records"] == 1
     assert payload["groups"]["model"][0]["key"] == "openai-codex/gpt-5.4"
 

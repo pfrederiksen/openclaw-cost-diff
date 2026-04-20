@@ -44,6 +44,8 @@ COST_KEYS = (
     "apiCostUsd",
     "apiCostUSD",
 )
+NESTED_COST_TOTAL_KEYS = COST_KEYS + ("usd", "amount", "total")
+COMPONENT_COST_KEYS = ("input", "output", "cacheRead", "cacheWrite")
 
 
 def default_data_paths() -> list[Path]:
@@ -158,11 +160,11 @@ def _record_from_mapping(item: Mapping[str, Any], source: str, context: Mapping[
             input_tokens = _int_from(usage["tokens"], INPUT_KEYS)
             output_tokens = output_tokens or _int_from(usage["tokens"], OUTPUT_KEYS)
 
-    cost = _float_from(item, COST_KEYS)
-    if cost is None and cost_block:
-        cost = _float_from(cost_block, COST_KEYS + ("usd", "amount", "total"))
+    cost = _cost_from_mapping(item)
     if cost is None and usage:
-        cost = _float_from(usage, COST_KEYS)
+        cost = _cost_from_mapping(usage)
+    if cost is None and cost_block:
+        cost = _cost_from_mapping(cost_block)
 
     if input_tokens == 0 and output_tokens == 0 and cost is None:
         return None
@@ -264,7 +266,7 @@ def _find_cost_mapping(item: Mapping[str, Any]) -> Mapping[str, Any] | None:
     direct = _mapping(item.get("cost"))
     if direct is not None:
         return direct
-    return _find_nested_mapping(item, lambda value: _has_any_key(value, COST_KEYS + ("usd", "amount", "total")))
+    return _find_nested_mapping(item, lambda value: _has_any_key(value, NESTED_COST_TOTAL_KEYS))
 
 
 def _find_nested_mapping(item: Mapping[str, Any], predicate: Any) -> Mapping[str, Any] | None:
@@ -331,6 +333,36 @@ def _int_from(item: Mapping[str, Any], keys: tuple[str, ...]) -> int:
 def _float_from(item: Mapping[str, Any], keys: tuple[str, ...]) -> float | None:
     value = _first_value(item, keys)
     if value in (None, ""):
+        return None
+
+
+def _cost_from_mapping(item: Mapping[str, Any]) -> float | None:
+    for key in NESTED_COST_TOTAL_KEYS:
+        if key not in item:
+            continue
+        value = item[key]
+        if isinstance(value, Mapping):
+            nested = _cost_from_mapping(value)
+            if nested is not None:
+                return nested
+            continue
+        parsed = _float_value(value)
+        if parsed is not None:
+            return parsed
+
+    component_values = [_float_value(item.get(key)) for key in COMPONENT_COST_KEYS]
+    present_components = [value for value in component_values if value is not None]
+    if present_components:
+        return sum(present_components)
+    return None
+
+
+def _float_value(value: Any) -> float | None:
+    if value in (None, "") or isinstance(value, bool):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
         return None
     try:
         return float(value)
